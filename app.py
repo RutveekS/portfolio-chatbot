@@ -28,7 +28,7 @@ def load_data(file):
 
     df["weight"] = pd.to_numeric(df["weight"], errors="coerce").fillna(0)
 
-    for col in ["scheme", "company", "sector", "market_cap", "fund_type"]:
+    for col in ["scheme", "company", "sector", "industry", "basic_industry", "market_cap", "fund_type"]:
         if col in df.columns:
             df[col] = df[col].astype(str).str.strip()
 
@@ -81,7 +81,6 @@ def render_fund_deep_dive(df_all, scheme):
 
     st.markdown(f"## {scheme}")
 
-    # Metrics
     total_weight = fund_df["weight"].sum()
     stocks = fund_df["company"].nunique()
 
@@ -94,7 +93,7 @@ def render_fund_deep_dive(df_all, scheme):
     cap = fund_df.groupby("market_cap", as_index=False)["weight"].sum()
 
     if not cap.empty:
-        fig = px.pie(cap, names="market_cap", values="weight", title="Market Cap Mix")
+        fig = px.pie(cap, names="market_cap", values="weight")
         st.plotly_chart(fig, use_container_width=True)
 
     # Top 10 holdings
@@ -105,11 +104,17 @@ def render_fund_deep_dive(df_all, scheme):
         .sort_values("weight", ascending=False)
         .head(10)
     )
+
     st.dataframe(top10, use_container_width=True, hide_index=True)
+
+    # 🔥 NEW: Top 10 sum
+    top10_sum = top10["weight"].sum()
+    st.metric("Top 10 Concentration", f"{top10_sum:.2f}%")
 
     # Full portfolio download
     st.markdown("### Full Portfolio")
     full = fund_df[["company", "weight", "market_cap", "sector"]].copy()
+
     st.download_button(
         "Download Full Portfolio CSV",
         export_csv(full),
@@ -125,14 +130,24 @@ with tab1:
     st.markdown("### Sector Screener")
 
     macro = st.selectbox("Macro Sector", sorted(df["macro_sector"].dropna().unique()))
-    filtered = df[df["macro_sector"] == macro]
+    temp = df[df["macro_sector"] == macro]
 
-    sector = st.selectbox("Sector", ["All"] + sorted(filtered["sector"].dropna().unique()))
+    sector = st.selectbox("Sector", ["All"] + sorted(temp["sector"].dropna().unique()))
     if sector != "All":
-        filtered = filtered[filtered["sector"] == sector]
+        temp = temp[temp["sector"] == sector]
+
+    # NEW: Industry
+    industry = st.selectbox("Industry", ["All"] + sorted(temp["industry"].dropna().unique()))
+    if industry != "All":
+        temp = temp[temp["industry"] == industry]
+
+    # NEW: Basic Industry
+    basic = st.selectbox("Basic Industry", ["All"] + sorted(temp["basic_industry"].dropna().unique()))
+    if basic != "All":
+        temp = temp[temp["basic_industry"] == basic]
 
     if st.button("Run Sector Screener"):
-        result = build_fund_table(filtered)
+        result = build_fund_table(temp)
         st.dataframe(result, use_container_width=True, hide_index=True)
 
         st.download_button(
