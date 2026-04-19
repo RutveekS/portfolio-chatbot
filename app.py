@@ -17,183 +17,159 @@ def load_data(file):
         "Fund Type": "fund_type",
         "Scheme Name": "scheme",
         "Company Name": "company",
-        "Issuer Name": "issuer",
         "Macro Economic Sector": "macro_sector",
         "Sector": "sector",
         "Industry": "industry",
         "Basic Industry": "basic_industry",
         "% of Net Assets": "weight",
         "Market Cap": "market_cap",
-        "AMC Name": "amc",
     }
     df = df.rename(columns=rename_map)
 
-    if "weight" in df.columns:
-        df["weight"] = pd.to_numeric(df["weight"], errors="coerce").fillna(0)
+    df["weight"] = pd.to_numeric(df["weight"], errors="coerce").fillna(0)
 
-    for col in ["scheme", "company", "sector", "industry", "basic_industry", "macro_sector", "market_cap", "amc"]:
+    for col in ["scheme", "company", "sector", "market_cap", "fund_type"]:
         if col in df.columns:
             df[col] = df[col].astype(str).str.strip()
 
     return df
 
-# Stop until file uploaded
-if uploaded_file is not None:
-    df = load_data(uploaded_file)
-    st.success("File uploaded successfully ✅")
-else:
+if uploaded_file is None:
     st.info("Please upload an Excel file to begin.")
     st.stop()
 
-# ------------------ APP START ------------------ #
-st.title("📊 Portfolio Analytics")
+df = load_data(uploaded_file)
 
-# ------------------ FUNCTIONS ------------------ #
-def sector_filter(df_in, macro, sector="All", industry="All", basic="All"):
-    f = df_in[df_in["macro_sector"] == macro].copy()
-    if sector != "All":
-        f = f[f["sector"] == sector]
-    if industry != "All":
-        f = f[f["industry"] == industry]
-    if basic != "All":
-        f = f[f["basic_industry"] == basic]
-    return f
+st.title("📊 Portfolio Analytics Dashboard")
+st.caption("Upload your monthly portfolio file to analyze funds, sectors, and holdings")
 
-def stock_filter(df_in, stocks):
-    if not stocks:
-        return df_in.iloc[0:0].copy()
-    pattern = "|".join(re.escape(s) for s in stocks)
-    return df_in[df_in["company"].str.contains(pattern, case=False, na=False)].copy()
+# ------------------ HELPERS ------------------ #
+def export_csv(df):
+    return df.to_csv(index=False).encode("utf-8")
 
-def top_funds(df_in):
-    if df_in.empty:
-        return pd.DataFrame(columns=["scheme", "weight"])
-    return (
-        df_in.groupby("scheme", as_index=False)["weight"]
-        .sum()
-        .sort_values("weight", ascending=False)
-        .reset_index(drop=True)
-    )
+def get_market_cap_split(df_in):
+    cap = df_in.groupby("market_cap")["weight"].sum()
+    return {
+        "Large": cap.get("Large Cap", 0),
+        "Mid": cap.get("Mid Cap", 0),
+        "Small": cap.get("Small Cap", 0),
+    }
 
-def get_fund_df(df_all, scheme):
-    return df_all[df_all["scheme"] == scheme].copy()
+def build_fund_table(df_in):
+    rows = []
+    grouped = df_in.groupby("scheme")
 
-def fund_metrics(fund_df):
-    eq = fund_df[fund_df["weight"] > 0].copy()
-    top10 = (
-        eq.groupby("company", as_index=False)["weight"]
-        .sum()
-        .sort_values("weight", ascending=False)
-        .head(10)
-    )
-    top5 = top10.head(5)["weight"].sum()
-    top10_sum = top10["weight"].sum()
-    stocks = eq["company"].nunique()
-    total_weight = eq["weight"].sum()
-    return stocks, total_weight, top5, top10_sum, eq
+    for scheme, data in grouped:
+        cap = get_market_cap_split(data)
+        fund_type = data["fund_type"].iloc[0] if "fund_type" in data.columns else "NA"
+        total_weight = data["weight"].sum()
 
-def export_csv(df_in):
-    return df_in.to_csv(index=False).encode("utf-8")
+        rows.append({
+            "Fund Name": scheme,
+            "Large Cap %": round(cap["Large"], 2),
+            "Mid Cap %": round(cap["Mid"], 2),
+            "Small Cap %": round(cap["Small"], 2),
+            "Fund Type": fund_type,
+            "Weight": round(total_weight, 2)
+        })
 
-def fig_to_png_bytes(fig):
-    return fig.to_image(format="png")
+    return pd.DataFrame(rows).sort_values("Weight", ascending=False)
 
-def render_downloads(table_df, fig=None, table_name="table", chart_name="chart"):
-    c1, c2 = st.columns(2)
-    with c1:
-        st.download_button(f"Download {table_name} CSV", export_csv(table_df), f"{table_name}.csv", "text/csv")
-    with c2:
-        if fig is not None:
-            st.download_button(f"Download {chart_name} PNG", fig_to_png_bytes(fig), f"{chart_name}.png", "image/png")
-
+# ------------------ FUND DEEP DIVE ------------------ #
 def render_fund_deep_dive(df_all, scheme):
-    fund_df = get_fund_df(df_all, scheme)
-    eq = fund_df[fund_df["weight"] > 0].copy()
-
-    stocks, total_weight, top5, top10, eq = fund_metrics(fund_df)
+    fund_df = df_all[df_all["scheme"] == scheme].copy()
 
     st.markdown(f"## {scheme}")
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Stocks", int(stocks))
-    c2.metric("Total Weight", f"{total_weight:.2f}%")
-    c3.metric("Top 5 Concentration", f"{top5:.2f}%")
-    c4.metric("Top 10 Concentration", f"{top10:.2f}%")
+    # Metrics
+    total_weight = fund_df["weight"].sum()
+    stocks = fund_df["company"].nunique()
 
-    # Sector
-    st.markdown("### Sector Allocation")
-    sec = eq.groupby("sector", as_index=False)["weight"].sum().sort_values("weight")
-    if not sec.empty:
-        fig = px.bar(sec, x="weight", y="sector", orientation="h", text="weight")
+    c1, c2 = st.columns(2)
+    c1.metric("Total Weight", f"{total_weight:.2f}%")
+    c2.metric("Number of Stocks", stocks)
+
+    # Market Cap Pie
+    st.markdown("### Market Cap Allocation")
+    cap = fund_df.groupby("market_cap", as_index=False)["weight"].sum()
+
+    if not cap.empty:
+        fig = px.pie(cap, names="market_cap", values="weight", title="Market Cap Mix")
         st.plotly_chart(fig, use_container_width=True)
-        render_downloads(sec, fig, "sector_allocation", "sector_chart")
 
-    # Market Cap
-    st.markdown("### Market Cap Mix")
-    cap = eq.groupby("market_cap", as_index=False)["weight"].sum()
-    st.dataframe(cap, use_container_width=True, hide_index=True)
-
-    # Top holdings
-    st.markdown("### Top Holdings")
-    top = (
-        eq.groupby("company", as_index=False)["weight"]
+    # Top 10 holdings
+    st.markdown("### Top 10 Holdings")
+    top10 = (
+        fund_df.groupby("company", as_index=False)["weight"]
         .sum()
         .sort_values("weight", ascending=False)
         .head(10)
     )
-    st.dataframe(top, use_container_width=True, hide_index=True)
+    st.dataframe(top10, use_container_width=True, hide_index=True)
 
-# ------------------ SESSION STATE ------------------ #
-def init_state():
-    if "sector_ran" not in st.session_state:
-        st.session_state.sector_ran = False
-        st.session_state.sector_result = pd.DataFrame()
-        st.session_state.stock_ran = False
-        st.session_state.stock_result = pd.DataFrame()
-
-init_state()
+    # Full portfolio download
+    st.markdown("### Full Portfolio")
+    full = fund_df[["company", "weight", "market_cap", "sector"]].copy()
+    st.download_button(
+        "Download Full Portfolio CSV",
+        export_csv(full),
+        f"{scheme}_portfolio.csv",
+        "text/csv"
+    )
 
 # ------------------ TABS ------------------ #
 tab1, tab2, tab3 = st.tabs(["Sector Screener", "Stock Screener", "Fund Deep Dive"])
 
 # -------- Sector Screener -------- #
 with tab1:
-    macro_options = sorted(df["macro_sector"].dropna().unique())
-    macro = st.selectbox("Macro Sector", macro_options)
+    st.markdown("### Sector Screener")
 
+    macro = st.selectbox("Macro Sector", sorted(df["macro_sector"].dropna().unique()))
     filtered = df[df["macro_sector"] == macro]
 
     sector = st.selectbox("Sector", ["All"] + sorted(filtered["sector"].dropna().unique()))
     if sector != "All":
         filtered = filtered[filtered["sector"] == sector]
 
-    top_n = st.slider("Top N", 5, 50, 20)
-
     if st.button("Run Sector Screener"):
-        result = top_funds(filtered).head(top_n)
-        st.session_state.sector_result = result
-        st.session_state.sector_ran = True
+        result = build_fund_table(filtered)
+        st.dataframe(result, use_container_width=True, hide_index=True)
 
-    if st.session_state.sector_ran:
-        st.dataframe(st.session_state.sector_result, use_container_width=True)
+        st.download_button(
+            "Download Results CSV",
+            export_csv(result),
+            "sector_screener.csv",
+            "text/csv"
+        )
 
 # -------- Stock Screener -------- #
 with tab2:
-    stocks = sorted(df["company"].dropna().unique())
-    selected = st.multiselect("Select Stocks", stocks)
+    st.markdown("### Stock Screener")
+
+    stocks = st.multiselect("Select Stocks", sorted(df["company"].dropna().unique()))
 
     if st.button("Run Stock Screener"):
-        result = top_funds(stock_filter(df, selected))
-        st.session_state.stock_result = result
-        st.session_state.stock_ran = True
+        if stocks:
+            pattern = "|".join(re.escape(s) for s in stocks)
+            filtered = df[df["company"].str.contains(pattern, case=False, na=False)]
 
-    if st.session_state.stock_ran:
-        st.dataframe(st.session_state.stock_result, use_container_width=True)
+            result = build_fund_table(filtered)
 
-# -------- Deep Dive -------- #
+            st.dataframe(result, use_container_width=True, hide_index=True)
+
+            st.download_button(
+                "Download Results CSV",
+                export_csv(result),
+                "stock_screener.csv",
+                "text/csv"
+            )
+        else:
+            st.warning("Select at least one stock.")
+
+# -------- Fund Deep Dive -------- #
 with tab3:
-    funds = sorted(df["scheme"].dropna().unique())
-    selected_fund = st.selectbox("Select Fund", funds)
+    st.markdown("### Fund Deep Dive")
 
-    if selected_fund:
-        render_fund_deep_dive(df, selected_fund)
+    fund = st.selectbox("Select Fund", sorted(df["scheme"].dropna().unique()))
+    if fund:
+        render_fund_deep_dive(df, fund)
