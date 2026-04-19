@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 import re
 
-st.set_page_config(page_title="Portfolio Analytics", layout="wide")
+st.set_page_config(page_title="Funds Analytics", layout="wide")
 
 # ------------------ FILE UPLOAD ------------------ #
 uploaded_file = st.file_uploader("📂 Upload Portfolio Excel", type=["xlsx"])
@@ -40,7 +40,7 @@ if uploaded_file is None:
 
 df = load_data(uploaded_file)
 
-st.title("📊 Portfolio Analytics Dashboard")
+st.title("📊 Funds Analytics Dashboard")
 st.caption("Upload your monthly portfolio file to analyze funds, sectors, and holdings")
 
 # ------------------ HELPERS ------------------ #
