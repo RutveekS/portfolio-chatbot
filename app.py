@@ -11,23 +11,47 @@ uploaded_file = st.file_uploader("📂 Upload Portfolio Excel", type=["xlsx"])
 @st.cache_data
 def load_data(file):
     df = pd.read_excel(file)
-    df.columns = df.columns.str.strip()
 
-    rename_map = {
-        "Fund Type": "fund_type",
-        "Scheme Name": "scheme",
-        "Company Name": "company",
-        "Macro Economic Sector": "macro_sector",
-        "Sector": "sector",
-        "Industry": "industry",
-        "Basic Industry": "basic_industry",
-        "% of Net Assets": "weight",
-        "Market Cap": "market_cap",
+    # 🔥 Clean column names aggressively
+    df.columns = df.columns.str.strip().str.replace("\n", "").str.replace("  ", " ")
+
+    # Normalize column names (lowercase for matching)
+    cols_lower = {col.lower(): col for col in df.columns}
+
+    def get_col(possible_names):
+        for name in possible_names:
+            if name.lower() in cols_lower:
+                return cols_lower[name.lower()]
+        return None
+
+    # Map columns dynamically
+    col_map = {
+        "scheme": get_col(["Scheme Name"]),
+        "company": get_col(["Company Name"]),
+        "macro_sector": get_col(["Macro Economic Sector"]),
+        "sector": get_col(["Sector"]),
+        "industry": get_col(["Industry"]),
+        "basic_industry": get_col(["Basic Industry"]),
+        "market_cap": get_col(["Market Cap"]),
+        "fund_type": get_col(["Fund Type"]),
+        "weight": get_col(["% of Net Assets", "Weight", "% Net Assets"]),
     }
-    df = df.rename(columns=rename_map)
 
+    # 🔥 Check missing critical columns
+    missing = [k for k, v in col_map.items() if v is None and k in ["scheme", "company", "weight"]]
+
+    if missing:
+        st.error(f"❌ Missing required columns: {missing}")
+        st.write("Columns found:", list(df.columns))
+        st.stop()
+
+    # Rename safely
+    df = df.rename(columns={v: k for k, v in col_map.items() if v is not None})
+
+    # Clean weight
     df["weight"] = pd.to_numeric(df["weight"], errors="coerce").fillna(0)
 
+    # Clean strings
     for col in ["scheme", "company", "sector", "industry", "basic_industry", "market_cap", "fund_type"]:
         if col in df.columns:
             df[col] = df[col].astype(str).str.strip()
