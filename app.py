@@ -120,6 +120,22 @@ def render_fund_deep_dive(df_all, scheme):
         fig = px.pie(cap, names="market_cap", values="weight")
         st.plotly_chart(fig, use_container_width=True)
 
+    # Sector Allocation Chart
+    st.markdown("### Sector Allocation")
+
+    sector_df = fund_df.groupby("sector", as_index=False)["weight"].sum().sort_values("weight")
+
+    if not sector_df.empty:
+        fig_sec = px.bar(
+            sector_df,
+            x="weight",
+            y="sector",
+            orientation="h",
+            text="weight"
+        )
+        fig_sec.update_traces(texttemplate="%{text:.2f}%")
+        st.plotly_chart(fig_sec, use_container_width=True)
+
     # Top 10 holdings
     st.markdown("### Top 10 Holdings")
     top10 = (
@@ -137,7 +153,7 @@ def render_fund_deep_dive(df_all, scheme):
 
     # Full portfolio download
     st.markdown("### Full Portfolio")
-    full = fund_df[["company", "weight", "market_cap", "sector"]].copy()
+    full = fund_df[["company", "weight", "market_cap", "macro_sector", "sector", "indutry", "basic_industry"]].copy()
 
     st.download_button(
         "Download Full Portfolio CSV",
