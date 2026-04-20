@@ -153,7 +153,7 @@ def render_fund_deep_dive(df_all, scheme):
 
     # Full portfolio download
     st.markdown("### Full Portfolio")
-    full = fund_df[["company", "weight", "market_cap", "macro_sector", "sector", "indutry", "basic_industry"]].copy()
+    full = fund_df[["company", "weight", "market_cap", "macro_sector", "sector", "industry", "basic_industry"]].copy()
 
     st.download_button(
         "Download Full Portfolio CSV",
