@@ -408,7 +408,7 @@ def render_performance_tab(df_portfolio, master_df, bm_df, nav_df):
         except Exception:
             return ""
 
-    styled = ret_df.style.applymap(style_returns, subset=["Fund", "Benchmark", "Alpha"])
+    styled = ret_df.style.map(style_returns, subset=["Fund", "Benchmark", "Alpha"])
     st.dataframe(styled, use_container_width=True, hide_index=True)
 
     st.markdown("### NAV vs Benchmark (Indexed to 100)")
@@ -511,7 +511,7 @@ def render_performance_tab(df_portfolio, master_df, bm_df, nav_df):
         except Exception:
             return ""
 
-    styled_cal = cal_df.style.applymap(color_cal, subset=["Fund (%)", "Benchmark (%)", "Alpha (%)"])
+    styled_cal = cal_df.style.map(color_cal, subset=["Fund (%)", "Benchmark (%)", "Alpha (%)"])
     st.dataframe(styled_cal, use_container_width=True, hide_index=True)
 
 
